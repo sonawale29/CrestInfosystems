@@ -1,7 +1,8 @@
 from .models import Product
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from rest_framework_simplejwt.tokens import RefreshToken
+
+User = get_user_model()
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -11,23 +12,35 @@ class ProductSerializer(serializers.ModelSerializer):
         read_only_fields = ['is_active', 'created_on', 'updated_on']
 
 
-class UserSerializer(serializers.ModelSerializer):
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
     class Meta:
         model = User
-        fields = ['username', 'password', 'role']
-        extra_kwargs = {'password': {'write_only': True}}
+        fields = ['username', 'email', 'password', 'role']
 
     def create(self, validated_data):
-        user = User.objects.create_user(**validated_data)
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password'],
+            role=validated_data.get('role', 'user'),
+        )
         return user
 
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
-    password = serializers.CharField()
+    password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        user = User.objects.filter(username=data['username']).first()
-        if user and user.check_password(data['password']):
-            return {'user': user}
-        raise serializers.ValidationError("Invalid credentials")
+        from django.contrib.auth import authenticate
+        user = authenticate(username=data['username'], password=data['password'])
+        if user is None:
+            raise serializers.ValidationError("Invalid credentials")
+        return user
+
+
+class TokenSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField()
